@@ -15,3 +15,29 @@ let budgets = [
     { "customer" : { "contact" : { "name" : "Laura", "surname" : "Gómez", "phone" : "", "email" : "laura@jazztel.com" }, "_id" : "60eddd49e52e6eed520450f1", "name" : "Jazztel España S.A.", "cif" : "A12345654", "adress" : "Príncipe de Vergara 12", "cp" : "28010", "city" : "Madrid", "createdAt" : "2021-06-21T16:37:10.376Z", "updatedAt" : "2021-06-22T15:04:43.175Z", "metaName" : "Jazztel España S.A." }, "code" : "006-2021", "date" : ISODate("2021-07-16T00:00:00Z"), "validUntil" : ISODate("2021-08-15T00:00:00Z"), "items" : [ { "article" : "Lorem", "quantity" : 50, "price" : 230, "amount" : 11500 } ], "idSalesUser" : "60edde18b4af3401007c8ca1", "createdAt" : ISODate("2021-07-16T16:59:19.491Z"), "updatedAt" : ISODate("2021-07-16T16:59:19.491Z") },
     { "customer" : { "contact" : { "name" : "Juan", "surname" : "Álvarez", "phone" : "", "email" : "a@a.com" }, "_id" : "60eef9534660d4190c02afb9", "name" : "Álvarez Distribuciones, S.L.", "metaName" : "alvarez Distribuciones, S.L.", "cif" : "B12334444", "adress" : "Lorem", "cp" : "28001", "city" : "Madrid", "createdAt" : "2021-07-14T14:48:51.183Z", "updatedAt" : "2021-07-14T14:48:51.183Z" }, "code" : "007-2021", "date" : ISODate("2021-07-16T00:00:00Z"), "validUntil" : ISODate("2021-08-15T00:00:00Z"), "items" : [ { "article" : "Lorem1", "quantity" : 100, "price" : 201, "amount" : 20100 } ], "idSalesUser" : "60edde18b4af3401007c8ca1", "createdAt" : ISODate("2021-07-16T16:59:41.705Z"), "updatedAt" : ISODate("2021-07-16T16:59:41.705Z") },
 ]
+
+// La primera operación de agregación necesita devolver las ventas acumuladas por cliente (de los
+// presupuestos)
+
+// customers
+// totals
+
+db.budgets.aggregate([
+    {$unwind: "$items"},
+    {$group: {_id: "$customer.name", totals: {$sum: "$items.amount"}}},
+    {$project: {customer: "$_id", totals: 1, _id: 0}},
+    {$sort: {totals: -1}}
+])
+
+// La segunda operación de agregación necesita devolver las ventas acumuladas por mes (3 últimos meses)
+
+// months
+// totals
+
+db.budgets.aggregate([
+    {$unwind: "$items"},
+    {$group: {_id: {month: {$month: "$date"}, year: {$year: "$date"}}, totals: {$sum: "$items.amount"}}},
+    {$project: {month: "$_id.month", year: "$_id.year", totals: 1, _id: 0}},
+    {$sort: {year: -1, month: -1}},
+    {$limit: 3}
+])
