@@ -224,3 +224,152 @@ db.clientes.aggregate([
     {$project: {actividad: "$_id", totalClientes: 1, _id: 0}},
     {$sort: {totalClientes: -1}}
 ])
+
+// $match 
+// Utiliza la misma sintaxis de doc de consulta en find() findOne() update() etc...
+
+use marathon
+
+db.runners.aggregate([
+    {$match: {$and: [{age: {$gte: 40}}, {age: {$lt: 50}}]}},
+    {$group: {_id: "$age", total: {$sum: 1}}},
+    {$project: {edad: "$_id", total: 1, _id: 0}},
+    {$sort: {edad: 1}}
+])
+
+
+// Ejemplo con índices de texto
+
+use shop4
+
+db.opiniones.insert([
+    {nombre: 'Nike Revolution', user: "00012", opinion: "buen servicio pero producto en mal estado"},
+    {nombre: 'Nike Revolution', user: "00013", opinion: "muy satisfecho con la compra"},
+    {nombre: 'Nike Revolution', user: "00014", opinion: "muy mal, tuve que devolverlas"},
+    {nombre: 'Adidas Peace', user: "00014", opinion: "perfecto en todos los sentidos"},
+    {nombre: 'Adidas Peace', user: "00013", opinion: "muy bien, muy contento"},
+    {nombre: 'Adidas Peace', user: "00012", opinion: "mal, no me han gustado"},
+    {nombre: 'Nike Revolution', user: "00015", opinion: "mal, no volveré a comprar"},
+])
+
+db.opiniones.createIndex({opinion: "text"})
+
+db.opiniones.aggregate([
+    {$match: {$text: {$search: "mal"}}},
+    {$group: {_id: "$nombre", malasOpiniones: {$sum: 1}}},
+    {$project: {producto: "$_id", malasOpiniones: 1, _id: 0}},
+    {$sort: {malasOpiniones: -1}}
+])
+
+{ "malasOpiniones" : 3, "producto" : "Nike Revolution" }
+{ "malasOpiniones" : 1, "producto" : "Adidas Peace" }
+
+// $addFields
+
+use marathon
+
+db.results.insert([
+    {name: 'Juan', arrive: new Date("2021-07-16T16:31:40")},
+    {name: 'Laura', arrive: new Date("2021-07-16T15:43:27")},
+    {name: 'Lucía', arrive: new Date("2021-07-16T17:10:22")},
+    {name: 'Carlos', arrive: new Date("2021-07-16T16:15:09")},
+])
+
+db.results.aggregate([
+    {$addFields: {time: {$subtract: ["$arrive", new Date("2021-07-16T12:00:00")]}}},
+    {$addFields: {hours: {$floor: {$mod: [{$divide: ["$time", 60 * 60 * 1000]}, 24]}}}},
+    {$addFields: {minutes: {$floor: {$mod: [{$divide: ["$time", 60 * 1000]}, 60]}}}},
+    {$addFields: {seconds: {$mod: [{$divide: ["$time", 1000]}, 60]}}},
+    {$sort: {time: 1}},
+    {$project: {name: 1, hours: 1, minutes: 1, seconds: 1, _id: 0}}
+])
+
+// $skip <entero>
+
+// $limit <entero>
+
+// $merge (salida vaya a otra colección de Mongo)
+
+use marathon
+
+db.runners.aggregate([
+    {$match: {$and: [{age: {$gte: 50}}, {age: {$lt: 60}}]}},
+    {$group: {_id: "$age", total: {$sum: 1}}},
+    {$project: {edad: "$_id", total: 1, _id: 0}},
+    {$sort: {edad: 1}},
+    {$merge: "resumen"} // la colección donde se insertarán el set de datos que produce la agregación
+])
+
+// Para enviar a una colección de otra base de datos y controlar la actualización de documentos
+
+db.runners.aggregate([
+    {$match: {$and: [{age: {$gte: 50}}, {age: {$lt: 60}}]}},
+    {$group: {_id: "$age", total: {$sum: 1}}},
+    {$project: {edad: "$_id", total: 1, _id: 0}},
+    {$sort: {edad: 1}},
+    {$merge: {
+        into: {db: "marathonMadrid", coll: "resumenMadrid"},
+        on: "dni",
+        whenMatched: "keepExisting",
+        whenNotMatched: "insert"
+    }}
+])
+
+// $lookup es realizar un determinado tipo de join en MongoDB (left outer)
+// Sintaxis
+// { $lookup: {
+//      from: <colección-externa>,
+//      localField: <campo-de-la-coleccion>
+//      forignField: <campo-de-la-colección-externa>
+//      as: <nombre del campo de salida (array)>
+// }}
+
+use shop5
+
+db.pedidos.insert([
+    {_id: 1, items: [
+        {codigo: "a01", precio: 12, cantidad: 2},
+        {codigo: "j02", precio: 10, cantidad: 4},
+    ]},
+    {_id: 2, items: [
+        {codigo: "j01", precio: 20, cantidad: 1},
+    ]},
+    {_id: 3, items: [
+        {codigo: "j01", precio: 20, cantidad: 4},
+    ]},
+])
+
+db.productos.insert([
+    {_id: 1, codigo: "a01", descripcion: "producto 1", stock: 120},
+    {_id: 2, codigo: "d01", descripcion: "producto 2", stock: 80},
+    {_id: 3, codigo: "j01", descripcion: "producto 3", stock: 60},
+    {_id: 4, codigo: "j02", descripcion: "producto 4", stock: 70}
+])
+
+// Operación de agregación desde la colección pedidos para obtener los datos
+// de cada producto comprado (desde la otra colección productos)
+
+db.pedidos.aggregate([
+    {$unwind: "$items"},
+    {$lookup: {
+        from: "productos",
+        localField: "items.codigo",
+        foreignField: "codigo",
+        as: "producto"
+    }},
+    {$unwind: "$producto"},
+    {$project: {
+        numeroPedido: "$_id", 
+        producto: "$items.codigo",
+        descripcion: "$producto.descripcion",
+        stock: "$producto.stock",
+        cantidad: "$items.cantidad",
+        precio: "$items.precio",
+        _id: 0
+    }}
+])
+{ "numeroPedido" : 1, "producto" : "a01", "descripcion" : "producto 1", "stock" : 120, "cantidad" : 2, "precio" : 12 }
+{ "numeroPedido" : 1, "producto" : "j02", "descripcion" : "producto 4", "stock" : 70, "cantidad" : 4, "precio" : 10 }
+{ "numeroPedido" : 2, "producto" : "j01", "descripcion" : "producto 3", "stock" : 60, "cantidad" : 1, "precio" : 20 }
+{ "numeroPedido" : 3, "producto" : "j01", "descripcion" : "producto 3", "stock" : 60, "cantidad" : 4, "precio" : 20 }
+
