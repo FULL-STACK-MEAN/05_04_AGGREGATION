@@ -118,3 +118,109 @@ db.pedidos.aggregate([
 { "totalVentas" : 126.60000000000001, "diaSemana" : 2 }
 { "totalVentas" : 320, "diaSemana" : 3 }
 { "totalVentas" : 120, "diaSemana" : 4 }
+
+// Promedio de cantidad de producto en cada pedido
+
+db.pedidos.aggregate([
+    {$group: {_id: "$sku", cantidadPromedio: {$avg: "$cantidad"}}},
+    {$project: {skuProducto: "$_id", cantidadPromedio: 1, _id: 0}}
+])
+{ "cantidadPromedio" : 6, "skuProducto" : "V102" }
+{ "cantidadPromedio" : 7.333333333333333, "skuProducto" : "V101" }
+
+// Para crear arrays, por ejemplo un array de libros para cada autor de la colección
+
+use biblioteca
+
+db.libros.aggregate([
+    {$group: {_id: "$autor", libros: {$push: "$titulo"}}},
+    {$project: {autor: "$_id", libros: 1, _id: 0}}
+])
+
+// $group se puede usar con varios campos como agrupadores
+
+use marathon  // Los corredores que tienen el mismo nombre y la misma edad
+
+db.runners.aggregate([
+    {$group: {_id: {nombre: "$name", edad: "$age"}, totalMismoNombreMismaEdad: {$sum: 1}}},
+    {$project: {nombre: "$_id.nombre", edad: "$_id.edad", totalMismoNombreMismaEdad: 1, _id: 0}},
+    {$sort: {nombre: 1, edad: 1}}
+])
+
+// $unwind Deconstruye un array en sus elementos
+
+use shop2
+
+db.items.insert([
+    {nombre: "Camiseta", marca: "Nike", tallas: ["xs","s","m","l","xl"]},
+    {nombre: "Camiseta", marca: "Puma", tallas: null},
+    {nombre: "Camiseta", marca: "Adidas"},
+])
+
+// Crea un nuevo documento con todos los datos y uno de los elementos del array
+
+db.items.aggregate([
+    {$unwind: "$tallas"},
+    {$project: {nombre: 1, marca: 1, talla: "$tallas", _id: 0}}
+])
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "xs" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "s" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "m" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "l" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "xl" }
+
+// Opciones de $unwind
+
+db.items.aggregate([
+    {$unwind: {path: "$tallas", includeArrayIndex: "posicion"}}, // devuelve el index en el campo posicion
+    {$project: {nombre: 1, marca: 1, talla: "$tallas", posicion: 1, _id: 0}}
+])
+{ "nombre" : "Camiseta", "marca" : "Nike", "posicion" : NumberLong(0), "talla" : "xs" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "posicion" : NumberLong(1), "talla" : "s" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "posicion" : NumberLong(2), "talla" : "m" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "posicion" : NumberLong(3), "talla" : "l" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "posicion" : NumberLong(4), "talla" : "xl" }
+
+
+db.items.aggregate([
+    {$unwind: {path: "$tallas", preserveNullAndEmptyArrays: true}}, // incluye los que tengan el array null o no lo tengan
+    {$project: {nombre: 1, marca: 1, talla: "$tallas", _id: 0}}
+])
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "xs" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "s" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "m" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "l" }
+{ "nombre" : "Camiseta", "marca" : "Nike", "talla" : "xl" }
+{ "nombre" : "Camiseta", "marca" : "Puma", "talla" : null }
+{ "nombre" : "Camiseta", "marca" : "Adidas" }
+
+
+// Ejemplo pregunta certificación
+db.items.insert([
+    {nombre: "Camiseta", marca: "Nike", tallas: ["xs","s","m","l","xl"]},
+    {nombre: "Camiseta", marca: "New Balance", tallas: ["xs","s"]},
+    {nombre: "Camiseta", marca: "Puma", tallas: null},
+    {nombre: "Camiseta", marca: "Adidas"},
+])
+
+// ¿Qué número de documentos devuelve la operación?
+
+db.items.aggregate([
+    {$unwind: {path: "$tallas", preserveNullAndEmptyArrays: true}}, 
+    {$project: {nombre: 1, marca: 1, talla: "$tallas", _id: 0}}
+])
+
+// a) 0
+// b) 4
+// c) 5
+// d) 7
+// e) 9 ok!
+
+use gimnasio2  // Actividades favoritas de los clientes
+
+db.clientes.aggregate([
+    {$unwind: "$actividades"},
+    {$group: {_id: "$actividades", totalClientes: {$sum: 1}}},
+    {$project: {actividad: "$_id", totalClientes: 1, _id: 0}},
+    {$sort: {totalClientes: -1}}
+])
